@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   servidor:
+    container_name: servidor
     build:
       context: .
       dockerfile: Dockerfile.servidor
@@ -13,6 +14,7 @@ services:
       - PUERTO=4000
 
   cliente1:
+    container_name: cliente1
     build:
       context: .
       dockerfile: Dockerfile.cliente
@@ -27,6 +29,7 @@ services:
     tty: true
 
   cliente2:
+    container_name: cliente2
     build:
       context: .
       dockerfile: Dockerfile.cliente
@@ -41,6 +44,7 @@ services:
     tty: true
 
   cliente3:
+    container_name: cliente3
     build:
       context: .
       dockerfile: Dockerfile.cliente
