@@ -4,38 +4,45 @@ Proyecto base para la Clase sobre Sockets de Sistemas Distribuidos.
 
 ## Integrantes
 
-- Apellidos y Nombres 1
-- Apellidos y Nombres 2
-- Apellidos y Nombres 3
+- Ernst, Milagros Shaiel
+- Limberger, Axel Agustín
+- Verón, Juan Manuel
 
-## Ejecución
+## Descripción
 
-### Local
+El proyecto implementa un servidor TCP concurrente capaz de recibir conexiones de múltiples clientes simultáneamente.  
+Los clientes envían mensajes en formato JSON al servidor, y el servidor los reenvía al resto de los clientes conectados mediante un mecanismo de broadcast.
+
+El servidor administra las conexiones concurrentes evitando condiciones de carrera mediante el uso de sincronización.
+
+## Instrucciones para ejecutar
+
+### Ejecución local
+
+Para ejecutar el servidor, abrir una terminal y correr:
 
 ```bash
-# Terminal 1: servidor
 go run ./cmd/servidor
+```
 
-# Terminal 2: cliente
+Para ejecutar un cliente, abrir otra terminal y correr:
+
+```bash
 go run ./cmd/cliente
 ```
 
 ### Docker Compose
 
+Para ejecutar el proyecto con Docker Compose:
+
 ```bash
 docker-compose up --build
 ```
 
-## Requisitos completados
+Para detener la ejecución:
 
-- [ ] Servidor TCP concurrente
-- [ ] Protocolo JSON
-- [ ] Registro de clientes con sync.RWMutex
-- [ ] Broadcast a todos los clientes
-- [ ] Cliente interactivo (stdin + recepción paralela)
-- [ ] Docker + docker-compose
-- [ ] Bonus: descubrimiento UDP
+```bash
+docker-compose down
+```
 
-## Captura de ejecución
-
-(Adjuntar log o captura de pantalla con múltiples clientes conectados)
+## Log de ejecución
