@@ -1,8 +1,6 @@
 # 2026 - Sistemas Distribuidos.
 
-### Descripción
-
-En este repositorio se desarrollarán los trabajos prácticos correspondientes a la cátedra de Sistemas Distribuidos.
+En este repositorio se desarrollarán los trabajos y prácticas guiadas correspondientes a la cátedra de Sistemas Distribuidos.
 
 ## Integrantes G08:
 
