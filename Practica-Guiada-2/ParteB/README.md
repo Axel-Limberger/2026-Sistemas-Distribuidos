@@ -52,11 +52,11 @@ make docker-down
 
 ## Requisitos completados
 
-- [ ] Servidor RPC con metodos `RegistrarLectura` y `ObtenerUltimaLectura`
-- [ ] Protocolo JSON en todos los mensajes (structs con tags json)
-- [ ] Cliente RPC con loop automatico de lecturas
-- [ ] Heartbeat UDP: servidor envia, cliente detecta timeout con estados `alive/suspect/dead`
-- [ ] Docker Compose con al menos 1 servidor + 2 clientes
+- [x] Servidor RPC con metodos `RegistrarLectura` y `ObtenerUltimaLectura`
+- [x] Protocolo JSON en todos los mensajes (structs con tags json)
+- [x] Cliente RPC con loop automatico de lecturas
+- [x] Heartbeat UDP: servidor envia, cliente detecta timeout con estados `alive/suspect/dead`
+- [x] Docker Compose con al menos 1 servidor + 2 clientes
 
 ## Captura de ejecucion
 
