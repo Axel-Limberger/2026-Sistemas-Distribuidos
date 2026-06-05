@@ -1,2 +1,1 @@
-echo '*:Zone.Identifier' >> .gitignore
-echo '*.Zone.Identifier' >> .gitignore
+*:Zone.Identifier
