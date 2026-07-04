@@ -8,9 +8,9 @@ Nodo que ejecuta Gossip (membresía P2P) + DHT Chord (lookup distribuido) simult
 
 ## Integrantes
 
-- Apellidos y Nombres 1
-- Apellidos y Nombres 2
-- Apellidos y Nombres 3
+- Limberger, Axel Agustín
+- Ernst, Milagros Shaiel
+- Verón, Juan Manuel
 
 ## Ejecucion
 
@@ -89,4 +89,10 @@ curl http://localhost:8080/estado
 
 ## Captura de ejecución
 
-_(Adjuntar log mostrando convergencia de Gossip y lookups en DHT)_
+### Captura 1: Convergencia de Gossip
+
+![Gossip](capturas/Gossip.png)
+
+### Captura 2: Lookups de DHT
+
+![Lookups](capturas/Lookups.png)

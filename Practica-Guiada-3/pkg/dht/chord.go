@@ -30,7 +30,20 @@ type NodoChord struct {
 // Construir la FingerTable con 3 entradas.
 func NuevoNodo(id int, Direccion, sucesor string, sucesorID int, predecesor string, predecesorID int) *NodoChord {
 	// COMPLETAR
-	return nil
+	nodo := &NodoChord{
+		ID:           id,
+		Direccion:    Direccion,
+		Sucesor:      sucesor,
+		SucesorID:    sucesorID,
+		Predecesor:   predecesor,
+		PredecesorID: predecesorID,
+		Datos:        make(map[int]string),
+	}
+	for i := 0; i < 3; i++ {
+		nodo.FingerTable[i] = sucesor
+		nodo.FingerTableIDs[i] = sucesorID
+	}
+	return nodo
 }
 
 // ActualizarAnillo reconfigura el sucesor y predecesor del nodo.
@@ -62,7 +75,9 @@ func (n *NodoChord) ActualizarAnillo(sucesor string, sucesorID int, predecesor s
 // Usar la función auxiliar entre.
 func (n *NodoChord) EsResponsable(clave int) bool {
 	// COMPLETAR
-	return false
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return entre(clave, n.PredecesorID, n.ID)
 }
 
 // TODO 10: Implementar MejorSalto.
@@ -70,7 +85,21 @@ func (n *NodoChord) EsResponsable(clave int) bool {
 // Retorna la Direccion del mejor nodo (o el sucesor si no hay mejor).
 func (n *NodoChord) MejorSalto(clave int) string {
 	// COMPLETAR
-	return ""
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	for i := 2; i >= 0; i-- {
+		fingerID := n.FingerTableIDs[i]
+		if n.ID < clave {
+			if fingerID > n.ID && fingerID < clave {
+				return n.FingerTable[i]
+			}
+		} else if n.ID > clave {
+			if fingerID > n.ID || fingerID < clave {
+				return n.FingerTable[i]
+			}
+		}
+	}
+	return n.Sucesor
 }
 
 // TODO 11: Implementar Almacenar y Obtener.
@@ -78,18 +107,29 @@ func (n *NodoChord) MejorSalto(clave int) string {
 // Obtener recupera un valor por clave. Retorna el valor y un bool indicando si existe.
 func (n *NodoChord) Almacenar(clave int, valor string) {
 	// COMPLETAR
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.Datos[clave] = valor
 }
 
 func (n *NodoChord) Obtener(clave int) (string, bool) {
 	// STUB: retorna vacío y false
-	return "", false
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	val, ok := n.Datos[clave]
+	return val, ok
 }
 
 // TODO 12: Implementar entre.
 // Función auxiliar: retorna true si valor esta en (inicio, fin] (modulo 256).
 func entre(valor, inicio, fin int) bool {
 	// COMPLETAR
-	return false
+	if inicio < fin {
+		return valor > inicio && valor <= fin
+	} else if inicio > fin {
+		return valor > inicio || valor <= fin
+	}
+	return true // inicio == fin, un solo nodo responsable de todo
 }
 
 // --- Servicio RPC para forwarding en cadena (Chord puro) ---
@@ -130,12 +170,38 @@ type ServicioChord struct {
 // MejorSalto por RPC al siguiente nodo en la cadena.
 func (s *ServicioChord) Almacenar(args ArgsStore, resp *RespStore) error {
 	// COMPLETAR
-	return nil
+	if s.Nodo.EsResponsable(args.Clave) {
+		s.Nodo.Almacenar(args.Clave, args.Valor)
+		resp.NodoID = s.Nodo.ID
+		resp.NodoResponsable = s.Nodo.Direccion
+		return nil
+	}
+	siguiente := s.Nodo.MejorSalto(args.Clave)
+	cliente, err := rpc.DialHTTP("tcp", siguiente)
+	if err != nil {
+		return err
+	}
+	defer cliente.Close()
+	return cliente.Call("ServicioChord.Almacenar", args, resp)
 }
 
 // TODO 14: Implementar Obtener (RPC).
 // Si el nodo es responsable, devolver local; si no, forwardea via MejorSalto.
 func (s *ServicioChord) Obtener(args ArgsLookup, resp *RespLookup) error {
 	// COMPLETAR
-	return nil
+	if s.Nodo.EsResponsable(args.Clave) {
+		val, ok := s.Nodo.Obtener(args.Clave)
+		resp.Valor = val
+		resp.Encontrado = ok
+		resp.NodoID = s.Nodo.ID
+		resp.NodoResponsable = s.Nodo.Direccion
+		return nil
+	}
+	siguiente := s.Nodo.MejorSalto(args.Clave)
+	cliente, err := rpc.DialHTTP("tcp", siguiente)
+	if err != nil {
+		return err
+	}
+	defer cliente.Close()
+	return cliente.Call("ServicioChord.Obtener", args, resp)
 }

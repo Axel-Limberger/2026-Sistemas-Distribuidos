@@ -73,7 +73,35 @@ func main() {
 
 	// TODO 15: inicializar chordNodo con sucesor y predecesor calculados
 	// a partir de NODO_ID y PEERS (IDs ordenados en el anillo 0-255).
-	chordNodo = nil // STUB
+	ids := []int{idNum}
+	for id := range pares {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	n := len(ids)
+	miIdx := 0
+	for i, v := range ids {
+		if v == idNum {
+			miIdx = i
+			break
+		}
+	}
+	predID := ids[(miIdx-1+n)%n]
+	sucID := ids[(miIdx+1)%n]
+
+	var predDir, sucDir string
+	if predID == idNum {
+		predDir = miDireccion
+	} else {
+		predDir = pares[predID]
+	}
+	if sucID == idNum {
+		sucDir = miDireccion
+	} else {
+		sucDir = pares[sucID]
+	}
+	chordNodo = dht.NuevoNodo(idNum, miDireccion, sucDir, sucID, predDir, predID)
 
 	// Endpoints HTTP
 	http.HandleFunc("/estado", manejadorEstado)
@@ -121,6 +149,22 @@ func parsearPares(peersEnv string) map[int]string {
 // que maneje intercambios de Gossip y lookups de DHT, y atender conexiones.
 func iniciarRPC() {
 	// COMPLETAR
+	server := rpc.NewServer()
+	server.Register(&gossip.ServicioGossip{Nodo: gossipNodo})
+	if chordNodo != nil {
+		server.Register(&dht.ServicioChord{Nodo: chordNodo})
+	}
+	l, err := net.Listen("tcp", ":"+puertoRPC)
+	if err != nil {
+		log.Fatalf("Error en listen RPC: %v", err)
+	}
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			continue
+		}
+		go server.ServeConn(conn)
+	}
 }
 
 // TODO 17: Implementar bucleAntiEntropia.
@@ -128,6 +172,28 @@ func iniciarRPC() {
 // Si hay par, conectarse via RPC, intercambiar miembros y fusionar.
 func bucleAntiEntropia() {
 	// COMPLETAR
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		par := gossipNodo.AntiEntropia()
+		if par == "" {
+			continue
+		}
+		c, err := rpc.Dial("tcp", par)
+		if err != nil {
+			continue
+		}
+		req := gossip.Intercambio{
+			Remitente: miDireccion,
+			Miembros:  gossipNodo.ObtenerMiembros(),
+		}
+		var resp gossip.Intercambio
+		if err := c.Call("ServicioGossip.Intercambiar", req, &resp); err == nil {
+			gossipNodo.FusionarMiembros(resp.Miembros)
+			gossipNodo.Unirse(resp.Remitente)
+		}
+		c.Close()
+	}
 }
 
 // TODO 18: Implementar manejadorEstado.
@@ -136,7 +202,7 @@ func manejadorEstado(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"node_id":      idNodo,
 		"miembros":     gossipNodo.ObtenerMiembros(),
-		"finger_table": []string{}, // STUB
+		"finger_table": chordNodo.FingerTable,
 	})
 }
 
@@ -146,7 +212,22 @@ func manejadorEstado(w http.ResponseWriter, r *http.Request) {
 // Si no, reenviar al sucesor via RPC.
 func manejadorAlmacenar(w http.ResponseWriter, r *http.Request) {
 	// STUB
-	w.WriteHeader(http.StatusNotImplemented)
+	var body struct {
+		Clave int    `json:"clave"`
+		Valor string `json:"valor"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	args := dht.ArgsStore{Clave: body.Clave, Valor: body.Valor}
+	var resp dht.RespStore
+	serv := &dht.ServicioChord{Nodo: chordNodo}
+	if err := serv.Almacenar(args, &resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 // TODO 20: Implementar manejadorBuscar.
@@ -154,7 +235,20 @@ func manejadorAlmacenar(w http.ResponseWriter, r *http.Request) {
 // Si responsable, devolver valor. Si no, reenviar o redirigir.
 func manejadorBuscar(w http.ResponseWriter, r *http.Request) {
 	// STUB
-	w.WriteHeader(http.StatusNotImplemented)
+	claveStr := r.URL.Query().Get("clave")
+	clave, err := strconv.Atoi(claveStr)
+	if err != nil {
+		http.Error(w, "Clave invalida", http.StatusBadRequest)
+		return
+	}
+	args := dht.ArgsLookup{Clave: clave}
+	var resp dht.RespLookup
+	serv := &dht.ServicioChord{Nodo: chordNodo}
+	if err := serv.Obtener(args, &resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 // bucleEstabilizacionChord recalcula el anillo Chord cada 10 segundos.
