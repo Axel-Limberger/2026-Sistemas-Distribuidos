@@ -1,6 +1,7 @@
 package replicacion
 
 import (
+	"log"
 	"net/rpc"
 	"sync"
 )
@@ -120,6 +121,9 @@ func (s *ServicioQuorum) Leer(args ArgsLectura, resp *RespLectura) error {
 func (s *ServicioQuorum) Sincronizar(args ArgsEscritura, resp *RespEscritura) error {
 	resp.Exito = s.Store.Sincronizar(args.Clave, args.Valor, args.Timestamp)
 	resp.NodoID = s.NodoID
+	if resp.Exito {
+		log.Printf("[STORE %s] Read-repair %s=%s (ts=%d)", s.NodoID, args.Clave, args.Valor, args.Timestamp)
+	}
 	return nil
 }
 
@@ -159,12 +163,14 @@ func CoordinarEscritura(clave, valor string, timestamp int64, pares []string, w 
 // TODO 11: Implementar CoordinarLectura (Cliente RPC)[cite: 980, 981, 982, 983].
 // Devuelve el valor con el timestamp más grande y true si obtuvo al menos R respuestas (incluida la local).
 func CoordinarLectura(clave string, pares []string, r int) (string, int64, bool) {
-	// NOTA: Para respetar la firma estricta dada por la cátedra en el archivo,
-	// las respuestas locales se procesarán en el main o mediante llamadas cruzadas.
-	// Para asegurar consistencia, coordinamos recolectando de todos los nodos activos del slice:
+	type respuestaConAddr struct {
+		addr string
+		resp RespLectura
+	}
+
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	var respuestas []RespLectura
+	var respuestas []respuestaConAddr
 
 	args := ArgsLectura{Clave: clave}
 
@@ -182,7 +188,7 @@ func CoordinarLectura(clave string, pares []string, r int) (string, int64, bool)
 			err = client.Call("ServicioQuorum.Leer", args, &resp)
 			if err == nil {
 				mu.Lock()
-				respuestas = append(respuestas, resp)
+				respuestas = append(respuestas, respuestaConAddr{addr: addr, resp: resp})
 				mu.Unlock()
 			}
 		}(parAddr)
@@ -197,23 +203,34 @@ func CoordinarLectura(clave string, pares []string, r int) (string, int64, bool)
 	var masReciente RespLectura
 	encontradoAlguno := false
 
-	for _, resp := range respuestas {
-		if resp.Encontrado {
-			if !encontradoAlguno || resp.Timestamp > masReciente.Timestamp {
-				masReciente = resp
+	for _, rc := range respuestas {
+		if rc.resp.Encontrado {
+			if !encontradoAlguno || rc.resp.Timestamp > masReciente.Timestamp {
+				masReciente = rc.resp
 				encontradoAlguno = true
 			}
 		}
 	}
 
-	// Read-Repair asíncrono: Si algún nodo posee una versión desactualizada, enviamos Sincronizar
+	// Read-Repair asíncrono: si algún nodo posee una versión desactualizada, enviamos Sincronizar
 	if encontradoAlguno {
-		for _, resp := range respuestas {
-			if resp.Timestamp < masReciente.Timestamp {
-				// Buscamos la dirección del par desactualizado para repararlo
-				go func(idReparar string) {
-					// Lógica interna para re-transmitir el valor correcto via RPC ServicioQuorum.Sincronizar
-				}(resp.NodoID)
+		for _, rc := range respuestas {
+			if rc.resp.Timestamp < masReciente.Timestamp {
+				go func(addr string) {
+					client, err := rpc.Dial("tcp", addr)
+					if err != nil {
+						return
+					}
+					defer client.Close()
+
+					argsRepair := ArgsEscritura{
+						Clave:     clave,
+						Valor:     masReciente.Valor,
+						Timestamp: masReciente.Timestamp,
+					}
+					var respRepair RespEscritura
+					client.Call("ServicioQuorum.Sincronizar", argsRepair, &respRepair)
+				}(rc.addr)
 			}
 		}
 		return masReciente.Valor, masReciente.Timestamp, true
