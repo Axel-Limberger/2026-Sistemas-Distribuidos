@@ -1,7 +1,6 @@
 package replicacion
 
 import (
-	"fmt"
 	"net/rpc"
 	"sync"
 )
