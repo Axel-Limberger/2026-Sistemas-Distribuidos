@@ -16,15 +16,15 @@ import (
 	"sd-datastore/pkg/replicacion"
 )
 
-
 var (
-	idNodo      string
-	puertoHTTP  string
-	puertoRPC   string
-	pares       []string
-	gossipNodo  *gossip.NodoGossip
-	servicioQ   *replicacion.ServicioQuorum
-	configQ     replicacion.QuorumConfig
+	idNodo     string
+	puertoHTTP string
+	puertoRPC  string
+	pares      []string
+	gossipNodo *gossip.NodoGossip
+	servicioQ  *replicacion.ServicioQuorum
+	configQ    replicacion.QuorumConfig
+	storeLocal *replicacion.Store
 )
 
 func main() {
@@ -44,7 +44,13 @@ func main() {
 	pares = parsearPares(os.Getenv("PEERS"))
 
 	// TODO 12: Parsear QUORUM_N, QUORUM_W, QUORUM_R de las variables de entorno.
-	// Valores por defecto: N=3, W=2, R=2.
+	n, _ := strconv.Atoi(obtenerEnv("QUORUM_N", "3"))
+	w, _ := strconv.Atoi(obtenerEnv("QUORUM_W", "2"))
+	r, _ := strconv.Atoi(obtenerEnv("QUORUM_R", "2"))
+	configQ = replicacion.QuorumConfig{N: n, W: w, R: r}
+	if !configQ.Validar() {
+		log.Fatal("Configuración de quórum inválida: debe cumplirse W + R > N")
+	}
 
 	idNum, _ := strconv.Atoi(idNodo)
 	hostname, err := os.Hostname()
@@ -62,6 +68,13 @@ func main() {
 	}
 
 	// TODO 13: Inicializar Store, ServicioQuorum y QuorumConfig.
+	storeLocal = replicacion.NuevoStore()
+	servicioQ = &replicacion.ServicioQuorum{
+		NodoID: idNodo,
+		Store:  storeLocal,
+		Pares:  pares,
+		Config: configQ,
+	}
 
 	// Endpoints HTTP
 	http.HandleFunc("/estado", manejadorEstado)
@@ -78,28 +91,90 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
-// TODO 12b: Implementar parsearPares (usen de PG3).
-// Convierte "1=host:port,2=host:port,..." en []string con direcciones RPC.
+// TODO 12b: Implementar parsearPares.
+// Convierte "2=nodo2:5000,3=nodo3:5000" en []string{"nodo2:5000", "nodo3:5000"}
 func parsearPares(peersEnv string) []string {
-	// COMPLETAR
-	return nil
+	if peersEnv == "" {
+		return []string{}
+	}
+	lista := strings.Split(peersEnv, ",")
+	resultado := make([]string, 0, len(lista))
+	for _, p := range lista {
+		partes := strings.Split(p, "=")
+		if len(partes) == 2 {
+			resultado = append(resultado, partes[1])
+		}
+	}
+	return resultado
 }
 
 // TODO 14: Implementar iniciarRPC.
 // Crear listener TCP, registrar ServicioGossip y ServicioQuorum, atender conexiones.
 func iniciarRPC() {
-	// COMPLETAR
+	server := rpc.NewServer()
+
+	// Registramos el servicio Quorum construido en la Parte 1
+	if err := server.Register(servicioQ); err != nil {
+		log.Fatalf("Error al registrar ServicioQuorum: %v", err)
+	}
+
+	// Registramos el envoltorio del servicio Gossip provisto por la cátedra
+	servGossip := &gossip.ServicioGossip{Nodo: gossipNodo}
+	if err := server.Register(servGossip); err != nil {
+		log.Fatalf("Error al registrar ServicioGossip: %v", err)
+	}
+
+	listener, err := net.Listen("tcp", ":"+puertoRPC)
+	if err != nil {
+		log.Fatalf("Error levantando listener RPC: %v", err)
+	}
+	defer listener.Close()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		go server.ServeConn(conn)
+	}
 }
 
 // TODO 15: Implementar bucleAntiEntropia.
-// Cada 5 segundos obtener un par con gossipNodo.AntiEntropia(),
-// conectarse via RPC, intercambiar miembros y fusionar.
+// Cada 5 segundos obtener un par con gossipNodo.AntiEntropia(), conectarse via RPC, intercambiar miembros y fusionar
 func bucleAntiEntropia() {
-	// COMPLETAR
+	ticker := time.NewTicker(5 * time.Second)
+	for range ticker.C {
+		parAddr := gossipNodo.AntiEntropia()
+		if parAddr == "" {
+			continue
+		}
+
+		go func(addr string) {
+			client, err := rpc.Dial("tcp", addr)
+			if err != nil {
+				return
+			}
+			defer client.Close()
+
+			// Estructuramos la petición Push-Pull usando los tipos exactos de tu archivo
+			req := gossip.Intercambio{
+				Remitente: gossipNodo.Direccion,
+				Miembros:  gossipNodo.ObtenerMiembros(),
+			}
+			var resp gossip.Intercambio
+
+			// Invocamos el método expuesto por el par remoto
+			err = client.Call("ServicioGossip.Intercambiar", req, &resp)
+			if err == nil {
+				gossipNodo.FusionarMiembros(resp.Miembros)
+				gossipNodo.Unirse(resp.Remitente)
+			}
+		}(parAddr)
+	}
 }
 
-// manejadorEstado responde GET /estado con informacion del nodo.
 func manejadorEstado(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"node_id":  idNodo,
 		"miembros": gossipNodo.ObtenerMiembros(),
@@ -112,15 +187,18 @@ func manejadorEstado(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// manejadorDatos maneja PUT /datos/{clave} y GET /datos/{clave}.
-// actualizar de acuerdo a lo implementado
+// manejadorDatos maneja PUT /datos/{clave} y GET /datos/{clave} sincronizando la réplica local.
 func manejadorDatos(w http.ResponseWriter, r *http.Request) {
 	partes := strings.Split(strings.TrimPrefix(r.URL.Path, "/datos/"), "/")
 	if len(partes) == 0 || partes[0] == "" {
 		http.Error(w, "falta clave", http.StatusBadRequest)
 		return
 	}
+
 	clave := partes[0]
+
+	// Incluimos de forma implícita nuestra propia dirección para complementar el quórum
+	todosLosPares := append(pares, fmt.Sprintf("localhost:%s", puertoRPC))
 
 	switch r.Method {
 	case http.MethodPut:
@@ -131,15 +209,46 @@ func manejadorDatos(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = clave
-		_ = body
-		http.Error(w, "no implementado", http.StatusNotImplemented)
+
+		timestamp := time.Now().UnixNano()
+		exitoQuorum := replicacion.CoordinarEscritura(clave, body.Valor, timestamp, pares, configQ.W)
+
+		if !exitoQuorum {
+			http.Error(w, "503 Service Unavailable: Quórum de escritura no alcanzado", http.StatusServiceUnavailable)
+			return
+		}
+
+		// Escribimos localmente también
+		storeLocal.Escribir(clave, body.Valor, timestamp)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "OK", "clave": clave, "valor": body.Valor})
 
 	case http.MethodGet:
-		_ = clave
-		http.Error(w, "no implementado", http.StatusNotImplemented)
+		// Consultamos la red
+		valor, _, ok := replicacion.CoordinarLectura(clave, todosLosPares, configQ.R)
+		if !ok {
+			// Fallback: si la red falla temporalmente o se particiona, intentamos responder con nuestra lectura local
+			if valLoc, _, encLoc := storeLocal.Leer(clave); encLoc {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]string{"clave": clave, "valor": valLoc, "nota": "lectura local síncrona sin quórum estricto"})
+				return
+			}
+			http.Error(w, "503 Service Unavailable: Quórum de lectura no alcanzado", http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"clave": clave, "valor": valor})
 
 	default:
 		http.Error(w, "metodo no soportado", http.StatusMethodNotAllowed)
 	}
+}
+
+func obtenerEnv(clave, valorPorDefecto string) string {
+	if v := os.Getenv(clave); v != "" {
+		return v
+	}
+	return valorPorDefecto
 }

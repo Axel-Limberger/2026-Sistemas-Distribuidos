@@ -12,9 +12,9 @@ PG4 reutiliza `pkg/gossip` del PG3. El método `Identificarse` y los tipos `Args
 
 ## Integrantes
 
-- Apellidos y Nombres 1
-- Apellidos y Nombres 2
-- Apellidos y Nombres 3
+- Ernst, Milagros Shaiel
+- LImberger, Axel Agustin
+- Veron, Juan Manuel
 
 ## Ejecucion
 
