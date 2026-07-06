@@ -82,10 +82,10 @@ curl http://localhost:8080/estado
 
 ## Requisitos completados
 
-- [ ] TODO 1-7: Gossip - membresia, anti-entropia (`pkg/gossip/nodo.go`)
-- [ ] TODO 8-14: DHT - finger table, lookup (`pkg/dht/chord.go`)
-- [ ] TODO 15-20: Nodo HTTP + RPC (`cmd/nodo/main.go`)
-- [ ] Docker Compose con 5 nodos
+- [x] TODO 1-7: Gossip - membresia, anti-entropia (`pkg/gossip/nodo.go`)
+- [x] TODO 8-14: DHT - finger table, lookup (`pkg/dht/chord.go`)
+- [x] TODO 15-20: Nodo HTTP + RPC (`cmd/nodo/main.go`)
+- [x] Docker Compose con 5 nodos
 
 ## Captura de ejecución
 

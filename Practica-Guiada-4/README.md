@@ -121,30 +121,30 @@ curl http://localhost:8081/datos/presion
 - [x] Docker Compose con 3 nodos
 
 ## Captura de ejecución
-### **Captura 1**: Salida de make build sin errores.
+### **Captura 1**: salida de make build sin errores.
 
 ![captura 1](capturas/cap1.png)
 
-### **Captura 2**: Gossip recién arrancado "miembros" con 1 solo elemento.
+### **Captura 2**: gossip recién arrancado "miembros" con 1 solo elemento.
 
 ![captura 2](capturas/cap2.png)
 
-### **Captura 3**: Gossip convergido, los tres muestran "miembros" con 3 elementos.
+### **Captura 3**: gossip convergido, los tres muestran "miembros" con 3 elementos.
 
 ![captura 3](capturas/cap3.png)
 
-### **Captura 4**: Escritura y lectura con quórum
+### **Captura 4**: escritura y lectura con quórum
 
 ![captura 4](capturas/cap4.png)
 
-### **Captura 5**: Tolerancia a fallos (1 nodo caído) 200 OK en ambas (con N=3,W=2,R=2 y 2 nodos vivos alcanza).
+### **Captura 5**: tolerancia a fallos (1 nodo caído).
 
 ![captura 5](capturas/cap5.png)
 
-### **Captura 6**: Quórum no alcanzado (2 nodos caídos) ambas respuestas en 503.
+### **Captura 6**: quórum no alcanzado (2 nodos caídos) ambas respuestas en 503.
 
 ![captura 6](capturas/cap6.png)
 
-### **Captura 7**: Read-repair
+### **Captura 7**: read-repair
 
 ![captura 7](capturas/cap7.png)
